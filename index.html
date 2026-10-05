@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>지뢰 찾기</title>
+<meta name="description" content="윈도우 고전 지뢰 찾기를 휴대폰에서">
+<meta name="theme-color" content="#008080">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="지뢰 찾기">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage">
+  <div id="win" class="window" data-layout="classic">
+    <nav id="menubar">
+      <button type="button" class="menu-btn" data-menu="game" aria-haspopup="menu">게임(<u>G</u>)</button>
+      <button type="button" class="menu-btn" data-menu="help" aria-haspopup="menu">도움말(<u>H</u>)</button>
+    </nav>
+    <div id="status">
+      <div id="mines" class="led" role="img" aria-label="남은 지뢰 수"></div>
+      <button type="button" id="face" class="face" data-face="smile" aria-label="새 게임"></button>
+      <div id="time" class="led" role="img" aria-label="걸린 시간"></div>
+    </div>
+    <div id="wrap"><div id="board" aria-label="지뢰밭"></div></div>
+    <div id="ctrl">
+      <button type="button" id="flagBtn" class="btn" aria-pressed="false">
+        <span class="ico-flag" aria-hidden="true"></span><span class="lbl">깃발 모드</span><span class="st">꺼짐</span>
+      </button>
+    </div>
+  </div>
+</div>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

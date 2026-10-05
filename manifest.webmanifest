@@ -1,0 +1,16 @@
+{
+  "name": "지뢰 찾기",
+  "short_name": "지뢰 찾기",
+  "description": "윈도우 고전 지뢰 찾기를 휴대폰에서",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#008080",
+  "theme_color": "#008080",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

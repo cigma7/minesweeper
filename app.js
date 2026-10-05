@@ -21,7 +21,7 @@
   };
   const SIZE_KEYS = Object.keys(CELL_SIZES);
   const DEFAULT_NAME = '익명';
-  const LONG_PRESS_MS = 400;
+  const LONG_PRESS_MS = 250;
   const MOVE_TOLERANCE = 10;
   const CELL_MIN = 18;
   const CELL_MAX = 64;

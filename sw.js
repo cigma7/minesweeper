@@ -1,6 +1,6 @@
 /* 인터넷 없이도 실행되도록 파일을 휴대폰에 보관한다.
  * 보관본을 먼저 보여주고, 뒤에서 새 버전을 받아 두었다가 다음 실행 때 쓴다. */
-const CACHE = 'minesweeper-v1';
+const CACHE = 'minesweeper-v2';
 const FILES = [
   './',
   'index.html',
@@ -14,7 +14,7 @@ const FILES = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -32,7 +32,8 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.open(CACHE).then(async (cache) => {
       const cached = await cache.match(req, { ignoreSearch: true });
-      const fresh = fetch(req)
+      // 브라우저 자체 보관본을 건너뛰고 서버에 새 버전이 있는지 묻는다.
+      const fresh = fetch(req.url, { cache: 'no-cache' })
         .then((res) => {
           if (res.ok) cache.put(req, res.clone());
           return res;

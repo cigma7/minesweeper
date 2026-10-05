@@ -161,3 +161,26 @@ test('저장했다 불러와도 판이 똑같다', () => {
 test('망가진 저장 데이터는 거부한다', () => {
   assert.throws(() => Minesweeper.fromJSON({ rows: 9, cols: 9, mines: 10, status: 'playing', mine: '0', state: '0' }));
 });
+
+test('판 맞추기: 일반 아이폰 세로 화면(350×582)에 보통 칸(38)이면 9×15', () => {
+  assert.deepEqual(Minesweeper.fitBoard(350, 582, 38), { rows: 15, cols: 9, cell: 38 });
+});
+
+test('판 맞추기: 칸은 정한 크기보다 작아지지 않고, 폭에 딱 맞게 늘어난다', () => {
+  for (const [w, h] of [[350, 582], [335, 540], [390, 670], [300, 900]]) {
+    for (const target of [34, 38, 43]) {
+      const { rows, cols, cell } = Minesweeper.fitBoard(w, h, target);
+      assert.ok(cell >= target, `${w}x${h} ${target}: 칸 ${cell}`);
+      assert.ok(cols * cell <= w && w - cols * cell < cols, '폭에 딱 맞음');
+      assert.ok(rows * cell <= h && h - rows * cell < cell, '높이는 한 칸 미만만 남음');
+    }
+  }
+});
+
+test('지뢰 수: 비율대로, 9칸 이상은 비워 둔다', () => {
+  assert.equal(Minesweeper.minesFor(135, 0.12), 16);
+  assert.equal(Minesweeper.minesFor(135, 0.16), 22);
+  assert.equal(Minesweeper.minesFor(135, 0.21), 28);
+  assert.equal(Minesweeper.minesFor(135, 0.25), 34);
+  assert.equal(Minesweeper.minesFor(10, 0.9), 1);
+});

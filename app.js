@@ -4,17 +4,27 @@
 
   const { HIDDEN, OPEN, FLAG, QUESTION } = Minesweeper;
 
+  // 판 크기는 화면에 맞춰 정하고, 난이도는 지뢰 비율로만 정한다.
+  // 앞의 셋은 원본 초급(10/81)·중급(40/256)·고급(99/480)의 지뢰 비율과 같다.
   const LEVELS = {
-    beginner: { rows: 9, cols: 9, mines: 10, name: '초급' },
-    intermediate: { rows: 16, cols: 16, mines: 40, name: '중급' },
-    expert: { rows: 16, cols: 30, mines: 99, name: '고급' },
+    easy: { name: '쉬움', ratio: 0.12 },
+    normal: { name: '보통', ratio: 0.16 },
+    hard: { name: '어려움', ratio: 0.21 },
+    extreme: { name: '아주 어려움', ratio: 0.25 },
   };
   const LEVEL_KEYS = Object.keys(LEVELS);
+  // 칸 한 변의 최소 크기. 일반 아이폰 세로 화면에서 각각 가로 8·9·10칸이 된다.
+  const CELL_SIZES = {
+    large: { name: '큰 칸', px: 43 },
+    normal: { name: '보통 칸', px: 38 },
+    small: { name: '작은 칸', px: 34 },
+  };
+  const SIZE_KEYS = Object.keys(CELL_SIZES);
   const DEFAULT_NAME = '익명';
   const LONG_PRESS_MS = 400;
   const MOVE_TOLERANCE = 10;
   const CELL_MIN = 18;
-  const CELL_MAX = 44;
+  const CELL_MAX = 64;
 
   // ---------- 저장 (휴대폰 안에만 남는다) ----------
   const store = {
@@ -34,17 +44,26 @@
   };
 
   const settings = Object.assign(
-    { level: 'beginner', custom: { rows: 9, cols: 9, mines: 10 }, marks: true, color: true, sound: false, flagMode: false },
+    { level: 'easy', cellSize: 'normal', marks: true, color: true, sound: false, flagMode: false, area: null },
     store.get('settings', {}),
   );
+  // 예전 버전(초급·중급·고급·사용자 정의)의 설정은 새 방식으로 바꾼다.
+  if (!LEVELS[settings.level]) settings.level = 'easy';
+  if (!CELL_SIZES[settings.cellSize]) settings.cellSize = 'normal';
+  delete settings.custom;
   const saveSettings = () => store.set('settings', settings);
 
+  // 기록은 난이도와 칸 크기 조합마다 따로 둔다 (칸 크기가 바뀌면 판 크기도 바뀐다).
+  const recordKey = (level, size) => `${level}.${size}`;
   function loadRecords() {
     const saved = store.get('records', {});
     const out = {};
-    for (const k of LEVEL_KEYS) {
-      const r = saved && saved[k];
-      out[k] = r && Number.isFinite(r.time) && typeof r.name === 'string' ? r : { time: 999, name: DEFAULT_NAME };
+    for (const level of LEVEL_KEYS) {
+      for (const size of SIZE_KEYS) {
+        const k = recordKey(level, size);
+        const r = saved && saved[k];
+        out[k] = r && Number.isFinite(r.time) && typeof r.name === 'string' ? r : { time: 999, name: DEFAULT_NAME };
+      }
     }
     return out;
   }
@@ -331,9 +350,37 @@
   })();
 
   // ---------- 판 ----------
-  function config() {
-    if (settings.level === 'custom') return settings.custom;
-    return LEVELS[settings.level] || LEVELS.beginner;
+  const isPortrait = () => stage.clientHeight >= stage.clientWidth;
+
+  // 세로 화면에서 판이 쓸 수 있는 공간을 기억해 둔다. 판 모양은 늘 이 공간 기준으로 정한다.
+  function rememberArea(w, h) {
+    if (!isPortrait()) return;
+    if (settings.area && settings.area.w === w && settings.area.h === h) return;
+    settings.area = { w, h };
+    saveSettings();
+  }
+
+  function portraitArea() {
+    stage.classList.add('measuring');
+    win.dataset.layout = 'classic';
+    const w = wrap.clientWidth;
+    const h = wrap.clientHeight;
+    const stageW = stage.clientWidth;
+    const stageH = stage.clientHeight;
+    stage.classList.remove('measuring');
+    rememberArea(w, h);
+    if (isPortrait() || !settings.area) {
+      if (isPortrait()) return { w, h };
+      // 세로로 한 번도 연 적 없이 가로에서 시작하면, 가로 화면 치수를 뒤집어 어림한다.
+      return { w: stageH - (stageW - w), h: stageW - (stageH - h) };
+    }
+    return settings.area;
+  }
+
+  function boardConfig() {
+    const area = portraitArea();
+    const { rows, cols } = Minesweeper.fitBoard(area.w, area.h, CELL_SIZES[settings.cellSize].px);
+    return { rows, cols, mines: Minesweeper.minesFor(rows * cols, LEVELS[settings.level].ratio) };
   }
 
   function buildBoard() {
@@ -431,6 +478,15 @@
   // ---------- 화면 크기에 맞추기 ----------
   // 원래 방향/돌린 방향, 위아래 배치/옆 배치 네 가지를 재 보고 칸이 가장 커지는 것을 고른다.
   function layout() {
+    // 아직 한 칸도 건드리지 않은 판은 화면 크기가 바뀌면 다시 맞춘다
+    // (앱이 막 켜져 화면 크기가 자리 잡기 전이나, 가로로 켰다가 세로로 돌린 경우).
+    if (game.status === 'ready' && game.state.every((s) => s === HIDDEN)) {
+      const cfg = boardConfig();
+      if (cfg.rows !== game.rows || cfg.cols !== game.cols || cfg.mines !== game.mines) {
+        game = new Minesweeper(cfg.rows, cfg.cols, cfg.mines);
+        save();
+      }
+    }
     const { rows, cols } = game;
     stage.classList.add('measuring');
     let best = null;
@@ -438,6 +494,7 @@
       win.dataset.layout = mode;
       const w = wrap.clientWidth;
       const h = wrap.clientHeight;
+      if (mode === 'classic') rememberArea(w, h);
       for (const rot of [false, true]) {
         const r = rot ? cols : rows;
         const c = rot ? rows : cols;
@@ -481,7 +538,7 @@
 
   // ---------- 게임 진행 ----------
   function newGame() {
-    const cfg = config();
+    const cfg = boardConfig();
     game = new Minesweeper(cfg.rows, cfg.cols, cfg.mines);
     clock.acc = 0;
     clock.running = false;
@@ -493,7 +550,7 @@
 
   function save() {
     if (!game) return;
-    store.set('save', { level: settings.level, game: game.toJSON(), ms: elapsedMs() });
+    store.set('save', { level: settings.level, cellSize: settings.cellSize, game: game.toJSON(), ms: elapsedMs() });
   }
 
   function restore() {
@@ -501,8 +558,8 @@
     if (!saved || !saved.game) return false;
     try {
       const g = Minesweeper.fromJSON(saved.game);
-      const cfg = config();
-      if (saved.level !== settings.level || g.rows !== cfg.rows || g.cols !== cfg.cols || g.mines !== cfg.mines) return false;
+      if (saved.level !== settings.level || saved.cellSize !== settings.cellSize) return false;
+      if (g.mines !== Minesweeper.minesFor(g.size, LEVELS[settings.level].ratio)) return false;
       game = g;
       clock.acc = Number(saved.ms) || 0;
       clock.running = false;
@@ -539,14 +596,15 @@
     sound.win();
     const t = shownSeconds();
     const level = settings.level;
-    if (level === 'custom' || t >= records[level].time) return;
+    const key = recordKey(level, settings.cellSize);
+    if (t >= records[key].time) return;
     // 이름을 받기 전에 앱이 꺼져도 기록은 남도록 먼저 저장한다.
     const name = store.get('lastName', DEFAULT_NAME);
-    records[level] = { time: t, name };
+    records[key] = { time: t, name };
     store.set('records', records);
     setTimeout(async () => {
       const entered = await askName(level, name);
-      records[level] = { time: t, name: entered };
+      records[key] = { time: t, name: entered };
       store.set('records', records);
       store.set('lastName', entered);
       showRecords();
@@ -696,7 +754,8 @@
       { label: '새 게임', key: 'F2', run: newGame },
       '-',
       ...LEVEL_KEYS.map((k) => ({ label: LEVELS[k].name, check: settings.level === k, run: () => setLevel(k) })),
-      { label: '사용자 정의...', check: settings.level === 'custom', run: customDialog },
+      '-',
+      ...SIZE_KEYS.map((k) => ({ label: CELL_SIZES[k].name, check: settings.cellSize === k, run: () => setCellSize(k) })),
       '-',
       { label: '물음표 표시(?)', check: settings.marks, run: () => toggleSetting('marks') },
       { label: '색', check: settings.color, run: () => toggleSetting('color') },
@@ -789,6 +848,12 @@
     newGame();
   }
 
+  function setCellSize(k) {
+    settings.cellSize = k;
+    saveSettings();
+    newGame();
+  }
+
   function toggleSetting(key) {
     settings[key] = !settings[key];
     saveSettings();
@@ -859,61 +924,19 @@
     });
   }
 
-  function numberField(label, value) {
-    const input = el('input', 'text');
-    input.type = 'text';
-    input.inputMode = 'numeric';
-    input.pattern = '[0-9]*';
-    input.value = String(value);
-    input.setAttribute('aria-label', label);
-    return input;
-  }
-
-  async function customDialog() {
-    const cur = settings.custom;
-    const form = el('div');
-    const fields = el('div', 'fields');
-    const rowsIn = numberField('높이', cur.rows);
-    const colsIn = numberField('너비', cur.cols);
-    const minesIn = numberField('지뢰 수', cur.mines);
-    fields.append(el('label', '', '높이(9~24):'), rowsIn, el('label', '', '너비(9~30):'), colsIn, el('label', '', '지뢰 수:'), minesIn);
-    form.append(fields, el('p', 'field-note', '범위를 벗어나면 원본처럼 가장 가까운 값으로 맞춥니다.'));
-    const clampInt = (v, lo, hi) => Math.max(lo, Math.min(hi, Number.parseInt(v, 10) || lo));
-    const result = await dialog({
-      title: '사용자 정의',
-      body: form,
-      buttons: [
-        {
-          label: '확인',
-          primary: true,
-          value: () => {
-            const rows = clampInt(rowsIn.value, 9, 24);
-            const cols = clampInt(colsIn.value, 9, 30);
-            const mines = clampInt(minesIn.value, 10, (rows - 1) * (cols - 1));
-            return { rows, cols, mines };
-          },
-        },
-        { label: '취소', value: null },
-      ],
-    });
-    if (!result) return;
-    settings.custom = result;
-    settings.level = 'custom';
-    saveSettings();
-    newGame();
-  }
-
   function recordsTable() {
     const grid = el('div', 'records');
     for (const k of LEVEL_KEYS) {
-      grid.append(el('span', '', LEVELS[k].name + ':'), el('span', 't', records[k].time + '초'), el('span', '', records[k].name));
+      const r = records[recordKey(k, settings.cellSize)];
+      grid.append(el('span', '', LEVELS[k].name + ':'), el('span', 't', r.time + '초'), el('span', '', r.name));
     }
     return grid;
   }
 
   function showRecords() {
     const holder = el('div');
-    holder.appendChild(recordsTable());
+    const note = el('p', 'field-note', `${CELL_SIZES[settings.cellSize].name} 기록입니다. 지금 판은 가로 ${game.cols} × 세로 ${game.rows}칸입니다.`);
+    holder.append(recordsTable(), note);
     return dialog({
       title: '지뢰 찾기 최고 기록',
       body: holder,
@@ -921,9 +944,9 @@
         {
           label: '점수 다시 설정',
           value: () => {
-            for (const k of LEVEL_KEYS) records[k] = { time: 999, name: DEFAULT_NAME };
+            for (const k of Object.keys(records)) records[k] = { time: 999, name: DEFAULT_NAME };
             store.set('records', records);
-            holder.replaceChildren(recordsTable());
+            holder.replaceChildren(recordsTable(), note);
             return undefined;
           },
         },
@@ -969,8 +992,10 @@
         <ul>
           <li>첫 칸에는 지뢰가 절대 없습니다.</li>
           <li>앱을 나가면 시간이 멈추고, 돌아오면 하던 판을 이어서 합니다.</li>
-          <li>세로 화면에서 고급 판은 돌려서 보여줍니다. 휴대폰을 가로로 눕히면 원래 모양이 됩니다.</li>
-          <li>난이도, 물음표 표시, 소리는 왼쪽 위 <b>게임</b> 메뉴에 있습니다.</li>
+          <li>판 크기는 휴대폰 화면에 꽉 차게 정해집니다. 난이도는 지뢰가 얼마나 빽빽한지로 나뉩니다 (쉬움 12% · 보통 16% · 어려움 21% · 아주 어려움 25%).</li>
+          <li>칸이 작거나 크게 느껴지면 <b>게임</b> 메뉴에서 큰 칸 · 보통 칸 · 작은 칸을 고르세요. 판 크기가 그에 맞게 바뀝니다.</li>
+          <li>휴대폰을 가로로 눕히면 같은 판을 돌려서 보여줍니다.</li>
+          <li>난이도, 칸 크기, 물음표 표시, 소리는 왼쪽 위 <b>게임</b> 메뉴에 있습니다.</li>
         </ul>`,
     });
   }
@@ -979,7 +1004,7 @@
     return dialog({
       title: '지뢰 찾기 정보',
       body: `<p><b>지뢰 찾기</b></p>
-        <p>윈도우의 고전 지뢰 찾기를 휴대폰에서 할 수 있게 다시 만든 것입니다. 규칙과 화면은 원본을 최대한 따랐고, 터치 조작만 휴대폰에 맞게 바꿨습니다.</p>
+        <p>윈도우의 고전 지뢰 찾기를 휴대폰에서 할 수 있게 다시 만든 것입니다. 규칙과 화면은 원본을 따랐고, 판 크기와 터치 조작은 휴대폰에 맞게 바꿨습니다.</p>
         <p>기록과 하던 판은 이 휴대폰 안에만 저장됩니다.</p>`,
     });
   }
@@ -988,11 +1013,8 @@
   installSprites();
   win.classList.toggle('mono', !settings.color);
   syncFlagButton();
-  if (!restore()) {
-    const cfg = config();
-    game = new Minesweeper(cfg.rows, cfg.cols, cfg.mines);
-  }
-  layout();
+  if (restore()) layout();
+  else newGame();
 
   setInterval(() => {
     if (game) renderTime();

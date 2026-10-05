@@ -254,7 +254,6 @@ button { font: inherit; color: inherit; margin: 0; border-radius: 0; -webkit-app
 .dialog .buttons { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding: 0 16px 14px; }
 .dialog .buttons .btn { min-width: 88px; }
 
-.fields { display: grid; grid-template-columns: auto 96px; gap: 10px 14px; align-items: center; justify-content: start; }
 .field-note { color: #333; font-size: 13px; margin-top: 10px; }
 input.text {
   width: 100%;

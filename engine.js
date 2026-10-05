@@ -205,6 +205,21 @@
       return g;
     }
 
+    // 너비×높이 공간에 한 변이 target 이상인 정사각형 칸을 최대한 채운다.
+    // 가로는 칸을 조금 늘려 폭에 딱 맞추고, 세로는 그 칸 크기로 들어가는 만큼 둔다.
+    static fitBoard(width, height, target, min = 5, max = 40) {
+      const clamp = (v) => Math.max(min, Math.min(max, v));
+      const cols = clamp(Math.floor(width / target));
+      const cell = Math.max(1, Math.floor(width / cols));
+      const rows = clamp(Math.floor(height / cell));
+      return { rows, cols, cell };
+    }
+
+    // 전체 칸 수와 지뢰 비율로 지뢰 수를 정한다. 첫 칸 주변이 열릴 여유로 9칸은 남긴다.
+    static minesFor(cells, ratio) {
+      return Math.max(1, Math.min(cells - 9, Math.round(cells * ratio)));
+    }
+
     // 테스트용: ['*..', '...'] 처럼 지뢰 위치를 직접 정한 판을 만든다.
     static fromMap(lines) {
       const rows = lines.length;

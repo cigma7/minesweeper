@@ -1,6 +1,6 @@
 /* 인터넷 없이도 실행되도록 파일을 휴대폰에 보관한다.
  * 보관본을 먼저 보여주고, 뒤에서 새 버전을 받아 두었다가 다음 실행 때 쓴다. */
-const CACHE = 'minesweeper-v3';
+const CACHE = 'minesweeper-v4';
 const FILES = [
   './',
   'index.html',

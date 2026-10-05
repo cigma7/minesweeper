@@ -44,13 +44,14 @@
   };
 
   const settings = Object.assign(
-    { level: 'easy', cellSize: 'normal', marks: true, color: true, sound: false, flagMode: false, area: null },
+    { level: 'easy', cellSize: 'normal', marks: true, color: true, sound: false, area: null },
     store.get('settings', {}),
   );
   // 예전 버전(초급·중급·고급·사용자 정의)의 설정은 새 방식으로 바꾼다.
   if (!LEVELS[settings.level]) settings.level = 'easy';
   if (!CELL_SIZES[settings.cellSize]) settings.cellSize = 'normal';
   delete settings.custom;
+  delete settings.flagMode;
   const saveSettings = () => store.set('settings', settings);
 
   // 기록은 난이도와 칸 크기 조합마다 따로 둔다 (칸 크기가 바뀌면 판 크기도 바뀐다).
@@ -192,7 +193,7 @@
     css.push(`.c.mw{background-image:${svgUrl(pixelSvg(MINE_ART, black, cross))}}`);
     css.push(`.c.f{background-image:${svgUrl(pixelSvg(FLAG_ART, black))}}`);
     for (const k of ['smile', 'oh', 'dead', 'cool']) css.push(`.face[data-face="${k}"]{background-image:${svgUrl(pixelSvg(faceArt(k), black))}}`);
-    css.push(`:root{--flag:${svgUrl(pixelSvg(FLAG_ART, black))};--check:${svgUrl(pixelSvg(CHECK_ART, black))}}`);
+    css.push(`:root{--check:${svgUrl(pixelSvg(CHECK_ART, black))}}`);
     const style = document.createElement('style');
     style.textContent = css.join('\n');
     document.head.appendChild(style);
@@ -243,7 +244,7 @@
   const faceBtn = $('face');
   const minesLed = $('mines');
   const timeLed = $('time');
-  const flagBtn = $('flagBtn');
+  const menuBtn = $('menuBtn');
 
   let game = null;
   let cells = [];
@@ -410,21 +411,18 @@
 
   function pressedSet() {
     const set = new Set();
-    let target = -1;
-    if (!press || press.spent || press.idx < 0 || game.over) return { set, target };
+    if (!press || press.spent || press.idx < 0 || game.over) return set;
     const i = press.idx;
     const s = game.state[i];
     if (s === OPEN) {
       if (game.adj[i] > 0) for (const j of game.nb[i]) if (game.state[j] === HIDDEN || game.state[j] === QUESTION) set.add(j);
-    } else if (press.mode === 'mark') {
-      target = i;
     } else if (s !== FLAG) {
       set.add(i);
     }
-    return { set, target };
+    return set;
   }
 
-  function cellClass(i, pressed, target) {
+  function cellClass(i, pressed) {
     const s = game.state[i];
     if (game.status === 'lost') {
       if (game.mine[i]) {
@@ -435,10 +433,9 @@
     }
     if (s === OPEN) return 'c o n' + game.adj[i];
     if (pressed.has(i)) return s === QUESTION ? 'c o qp' : 'c o n0';
-    const t = i === target ? ' t' : '';
-    if (s === FLAG) return 'c h f' + t;
-    if (s === QUESTION) return 'c h q' + t;
-    return 'c h' + t;
+    if (s === FLAG) return 'c h f';
+    if (s === QUESTION) return 'c h q';
+    return 'c h';
   }
 
   function faceKind() {
@@ -449,9 +446,9 @@
   }
 
   function render() {
-    const { set, target } = pressedSet();
+    const pressed = pressedSet();
     for (let i = 0; i < game.size; i++) {
-      const cls = cellClass(i, set, target);
+      const cls = cellClass(i, pressed);
       if (cells[i].className !== cls) cells[i].className = cls;
     }
     if (shown.mines !== game.minesLeft) {
@@ -636,10 +633,9 @@
     p.timer = 0;
     const s = game.state[p.idx];
     if (s === OPEN) return; // 숫자 칸은 손을 뗄 때 동시 열기
-    if (settings.flagMode && s === FLAG) return;
     p.spent = true;
     haptic();
-    act(p.idx, settings.flagMode ? 'open' : 'mark');
+    act(p.idx, 'mark');
     render();
   }
 
@@ -667,7 +663,6 @@
       idx,
       x0: e.clientX,
       y0: e.clientY,
-      mode: settings.flagMode ? 'mark' : 'open',
       chordOnly: e.button === 1,
       spent: false,
       timer: 0,
@@ -705,7 +700,7 @@
       if (p.chordOnly) {
         if (game.state[p.idx] === OPEN) act(p.idx, 'open');
       } else {
-        act(p.idx, p.mode);
+        act(p.idx, 'open');
       }
     }
     render();
@@ -738,17 +733,6 @@
   faceBtn.addEventListener('pointerleave', faceUp);
   faceBtn.addEventListener('click', () => newGame());
 
-  function syncFlagButton() {
-    flagBtn.setAttribute('aria-pressed', String(settings.flagMode));
-    flagBtn.querySelector('.st').textContent = settings.flagMode ? '켜짐' : '꺼짐';
-  }
-  flagBtn.addEventListener('click', () => {
-    settings.flagMode = !settings.flagMode;
-    saveSettings();
-    syncFlagButton();
-    haptic();
-  });
-
   document.addEventListener('keydown', (e) => {
     if (e.key === 'F2' && !openDialogs) {
       e.preventDefault();
@@ -757,45 +741,55 @@
   });
 
   // ---------- 메뉴 ----------
-  const MENUS = {
-    game: () => [
-      { label: '새 게임', key: 'F2', run: newGame },
-      '-',
-      ...LEVEL_KEYS.map((k) => ({ label: LEVELS[k].name, check: settings.level === k, run: () => setLevel(k) })),
-      '-',
-      ...SIZE_KEYS.map((k) => ({ label: CELL_SIZES[k].name, check: settings.cellSize === k, run: () => setCellSize(k) })),
-      '-',
-      { label: '물음표 표시(?)', check: settings.marks, run: () => toggleSetting('marks') },
-      { label: '색', check: settings.color, run: () => toggleSetting('color') },
-      { label: '소리', check: settings.sound, run: () => toggleSetting('sound') },
-      '-',
-      { label: '최고 기록...', run: showRecords },
-    ],
-    help: () => [
-      { label: '게임 방법', run: showHelp },
-      '-',
-      { label: '지뢰 찾기 정보...', run: showAbout },
-    ],
-  };
+  const menuItems = () => [
+    { label: '새 게임', key: 'F2', run: newGame },
+    '-',
+    ...LEVEL_KEYS.map((k) => ({ label: LEVELS[k].name, check: settings.level === k, run: () => setLevel(k) })),
+    '-',
+    ...SIZE_KEYS.map((k) => ({ label: CELL_SIZES[k].name, check: settings.cellSize === k, run: () => setCellSize(k) })),
+    '|', // 가로 화면에서는 여기서 두 번째 단으로 넘어간다
+    { label: '물음표 표시(?)', check: settings.marks, run: () => toggleSetting('marks') },
+    { label: '색', check: settings.color, run: () => toggleSetting('color') },
+    { label: '소리', check: settings.sound, run: () => toggleSetting('sound') },
+    '-',
+    { label: '최고 기록...', run: showRecords },
+    '-',
+    { label: '게임 방법', run: showHelp },
+    { label: '지뢰 찾기 정보...', run: showAbout },
+  ];
 
   let menu = null;
+  let menuClosedAt = 0;
   function closeMenu() {
     if (!menu) return;
     menu.layer.remove();
     menu.btn.classList.remove('open');
     menu = null;
+    menuClosedAt = performance.now();
   }
 
-  function openMenu(name, btn) {
+  function openMenu(btn) {
     closeMenu();
     const layer = document.createElement('div');
     layer.className = 'menu-layer';
     const box = document.createElement('div');
     box.className = 'window dropdown';
     box.setAttribute('role', 'menu');
-    for (const item of MENUS[name]()) {
-      if (item === '-') {
-        box.appendChild(document.createElement('hr'));
+    // 가로 화면처럼 높이가 낮으면 메뉴가 화면을 넘지 않게 두 단으로 나눈다.
+    const twoColumns = document.documentElement.clientHeight < 500;
+    box.classList.toggle('two', twoColumns);
+    let col = document.createElement('div');
+    col.className = 'col';
+    box.appendChild(col);
+    for (const item of menuItems()) {
+      if (item === '|' && twoColumns) {
+        col = document.createElement('div');
+        col.className = 'col';
+        box.appendChild(col);
+        continue;
+      }
+      if (item === '-' || item === '|') {
+        col.appendChild(document.createElement('hr'));
         continue;
       }
       const b = document.createElement('button');
@@ -816,7 +810,7 @@
         closeMenu();
         item.run();
       });
-      box.appendChild(b);
+      col.appendChild(b);
     }
     layer.addEventListener('pointerdown', (e) => {
       if (e.target === layer) closeMenu();
@@ -843,11 +837,10 @@
     box.style.maxHeight = vh - top - 4 + 'px';
   }
 
-  document.querySelectorAll('.menu-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (menu && menu.btn === btn) closeMenu();
-      else openMenu(btn.dataset.menu, btn);
-    });
+  menuBtn.addEventListener('click', () => {
+    if (menu) closeMenu();
+    // 메뉴가 열린 채 메뉴 버튼을 누르면 바깥 누르기로 이미 닫혔다. 바로 다시 열지 않는다.
+    else if (performance.now() - menuClosedAt > 400) openMenu(menuBtn);
   });
 
   function setLevel(k) {
@@ -991,7 +984,6 @@
         <ul>
           <li><b>탭</b> — 칸 열기</li>
           <li><b>길게 누르기</b> — 깃발 꽂기. 다시 길게 누르면 물음표, 한 번 더 누르면 지워집니다.</li>
-          <li><b>깃발 모드 버튼</b> — 켜면 반대로 됩니다. 탭하면 깃발, 길게 누르면 열기.</li>
           <li><b>숫자 칸 탭</b> — 주변에 꽂은 깃발 수가 숫자와 같으면 나머지 주변 칸을 한꺼번에 엽니다.</li>
           <li><b>누른 채 밀기</b> — 누른 칸을 옆 칸으로 옮길 수 있습니다. 손을 뗀 칸이 열립니다.</li>
           <li><b>스마일</b> — 새 게임</li>
@@ -1001,9 +993,9 @@
           <li>첫 칸에는 지뢰가 절대 없습니다.</li>
           <li>앱을 나가면 시간이 멈추고, 돌아오면 하던 판을 이어서 합니다.</li>
           <li>판 크기는 휴대폰 화면에 꽉 차게 정해집니다. 난이도는 지뢰가 얼마나 빽빽한지로 나뉩니다 (쉬움 12% · 보통 16% · 어려움 21% · 아주 어려움 25%).</li>
-          <li>칸이 작거나 크게 느껴지면 <b>게임</b> 메뉴에서 큰 칸 · 보통 칸 · 작은 칸을 고르세요. 판 크기가 그에 맞게 바뀝니다.</li>
+          <li>칸이 작거나 크게 느껴지면 <b>메뉴</b>에서 큰 칸 · 보통 칸 · 작은 칸을 고르세요. 판 크기가 그에 맞게 바뀝니다.</li>
           <li>휴대폰을 가로로 눕히면 같은 판을 돌려서 보여줍니다.</li>
-          <li>난이도, 칸 크기, 물음표 표시, 소리는 왼쪽 위 <b>게임</b> 메뉴에 있습니다.</li>
+          <li>난이도, 칸 크기, 물음표 표시, 소리는 지뢰 수 왼쪽의 <b>메뉴</b> 버튼에 있습니다.</li>
         </ul>`,
     });
   }
@@ -1020,7 +1012,6 @@
   // ---------- 시작 ----------
   installSprites();
   win.classList.toggle('mono', !settings.color);
-  syncFlagButton();
   if (restore()) layout();
   else newGame();
 

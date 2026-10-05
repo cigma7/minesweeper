@@ -713,7 +713,15 @@
   board.addEventListener('pointerup', (e) => finishPress(e, false));
   board.addEventListener('pointercancel', (e) => finishPress(e, true));
   document.addEventListener('contextmenu', (e) => e.preventDefault());
-  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  // 화면 확대·축소를 막는다. 아이폰 Safari 는 viewport 의 확대 금지 설정을 무시하므로
+  // 두 손가락 제스처와 두 번 탭을 직접 취소한다.
+  for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+  }
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
 
   // 스마일: 누르면 들어가고, 손을 떼면 새 게임
   faceBtn.addEventListener('pointerdown', () => {
